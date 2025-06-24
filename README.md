@@ -86,7 +86,7 @@ python train.py \
   --batch_size 4 --num_workers 8 --gpus 1 --precision 16
 ```
 
-The checkpoint will be saved in `ckpt` directory, and the tensorboard log will be saved in `lighntning_logs` directory.
+The checkpoint will be saved in `ckpt` directory, and the tensorboard log will be saved in `lighntning_logs` directory. If you meet the NaN issue when training BA-TFD+, that might be caused by the bug in PyTorch self attention ops, upgrading or changing the PyTorch version can solve it.
 
 ### Training BA-TFD+
 
