@@ -4,7 +4,7 @@ from typing import Any, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
-from pytorch_lightning import LightningModule, Trainer, Callback
+from lightning.pytorch import LightningModule, Trainer, Callback
 from torch import Tensor
 
 from dataset import LavdfDataModule

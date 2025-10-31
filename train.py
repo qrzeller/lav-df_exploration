@@ -2,8 +2,8 @@ import argparse
 import os
 
 import toml
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from lightning.pytorch import Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 from dataset.lavdf import LavdfDataModule
 from model import Batfd, BatfdPlus
@@ -125,7 +125,9 @@ if __name__ == '__main__':
         accelerator="auto",
         devices=args.gpus,
         strategy=None if args.gpus < 2 else "ddp",
-        resume_from_checkpoint=args.resume,
     )
 
-    trainer.fit(model, dm)
+    if args.resume:
+        trainer.fit(model, dm, ckpt_path=args.resume)
+    else:
+        trainer.fit(model, dm)

@@ -9,8 +9,8 @@ import scipy as sp
 import torch
 import torchaudio
 from einops import rearrange
-from pytorch_lightning import LightningDataModule
-from pytorch_lightning.utilities.types import TRAIN_DATALOADERS, EVAL_DATALOADERS
+from lightning.pytorch import LightningDataModule
+from lightning.pytorch.utilities.types import TRAIN_DATALOADERS, EVAL_DATALOADERS
 from torch import Tensor
 from torch.nn import functional as F, Identity
 from torch.utils.data import DataLoader, RandomSampler

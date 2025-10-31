@@ -66,7 +66,7 @@ The main versions are,
 - Python >= 3.7, < 3.11
 - PyTorch >= 1.13
 - torchvision >= 0.14
-- pytorch_lightning == 1.7.*
+- lightning >= 2.0.0
 
 Run the following command to install the required packages.
 

@@ -10,7 +10,7 @@ import torch
 import torchaudio
 import torchvision
 from einops import rearrange
-from pytorch_lightning import Callback, Trainer, LightningModule
+from lightning.pytorch import Callback, Trainer, LightningModule
 from torch import Tensor
 from torch.nn import functional as F, Module
 
