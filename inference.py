@@ -4,6 +4,7 @@ from typing import Any, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
+import torch
 from lightning.pytorch import LightningModule, Trainer, Callback
 from torch import Tensor
 
@@ -138,9 +139,22 @@ def inference_batfd(model_name: str, model: LightningModule, dm: LavdfDataModule
 
     test_dataset = dm.test_dataset
 
+    # choose accelerator and devices in a way compatible with MPS on macOS
+    if gpus > 0:
+        # prefer MPS on macOS if available
+        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            accelerator = "mps"
+            devices = 1
+        else:
+            accelerator = "gpu"
+            devices = gpus
+    else:
+        accelerator = "cpu"
+        devices = None
+
     trainer = Trainer(logger=False,
-        enable_checkpointing=False, devices=1 if gpus > 1 else None,
-        accelerator="gpu" if gpus > 0 else "cpu",
+        enable_checkpointing=False, devices=devices,
+        accelerator=accelerator,
         callbacks=[SaveToCsvCallback(max_duration, test_dataset.metadata, model_name, model_type, modalities)]
     )
 
