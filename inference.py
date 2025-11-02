@@ -39,7 +39,7 @@ class SaveToCsvCallback(Callback):
         outputs: Any,
         batch: Any,
         batch_idx: int,
-        dataloader_idx: int,
+        dataloader_idx: Optional[int] = None,
     ) -> None:
         if self.model_type == "batfd":
             fusion_bm_map, v_bm_map, a_bm_map = outputs
