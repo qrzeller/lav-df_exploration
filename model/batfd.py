@@ -110,8 +110,7 @@ class Batfd(LightningModule):
             "v_frame_loss": v_frame_loss, "a_frame_loss": a_frame_loss, "contrast_loss": contrast_loss
         }
 
-    def training_step(self, batch: Optional[Union[Tensor, Sequence[Tensor]]] = None, batch_idx: Optional[int] = None,
-        optimizer_idx: Optional[int] = None, hiddens: Optional[Tensor] = None
+    def training_step(self, batch: Optional[Union[Tensor, Sequence[Tensor]]] = None, batch_idx: Optional[int] = None
     ) -> Tensor:
         video, audio, label, n_frames, v_bm_label, a_bm_label, v_frame_label, a_frame_label, contrast_label = batch
 
@@ -149,7 +148,7 @@ class Batfd(LightningModule):
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
-                "scheduler": ReduceLROnPlateau(optimizer, factor=0.5, patience=3, verbose=True, min_lr=1e-8),
+                "scheduler": ReduceLROnPlateau(optimizer, factor=0.5, patience=3, min_lr=1e-8),
                 "monitor": "val_loss"
             }
         }

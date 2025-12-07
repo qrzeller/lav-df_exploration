@@ -260,8 +260,7 @@ class BatfdPlus(LightningModule):
         )
         return loss_dict
 
-    def training_step(self, batch: Optional[Union[Tensor, Sequence[Tensor]]] = None, batch_idx: Optional[int] = None,
-        optimizer_idx: Optional[int] = None, hiddens: Optional[Tensor] = None
+    def training_step(self, batch: Optional[Union[Tensor, Sequence[Tensor]]] = None, batch_idx: Optional[int] = None
     ) -> Tensor:
         loss_dict = self.step(batch)
 
