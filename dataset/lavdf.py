@@ -216,7 +216,13 @@ class Lavdf(Dataset):
                     # [i, j]: Start in i, end in j.
 
         ##########################################################################################################
-        gt_iou_map = F.pad(gt_iou_map.float(), pad=[0, self.video_padding - frames, 0, 0])
+        # Normalize temporal length to self.video_padding by pad/crop
+        gt_iou_map = gt_iou_map.float()
+        cur_len = gt_iou_map.shape[1]
+        if cur_len < self.video_padding:
+            gt_iou_map = F.pad(gt_iou_map, pad=[0, self.video_padding - cur_len, 0, 0])
+        elif cur_len > self.video_padding:
+            gt_iou_map = gt_iou_map[:, :self.video_padding]
 
         if not self.require_match_scores:
             return gt_iou_map
