@@ -12,7 +12,9 @@ class MaskedBMLoss(Module):
     def forward(self, pred: Tensor, true: Tensor, n_frames: Tensor):
         loss = []
         for i, frame in enumerate(n_frames):
-            loss.append(self.loss_fn(pred[i, :, :frame], true[i, :, :frame]))
+            f = int(frame.item())
+            max_t = min(pred.size(-1), true.size(-1), f)
+            loss.append(self.loss_fn(pred[i, :, :max_t], true[i, :, :max_t]))
         return torch.mean(torch.stack(loss))
 
 
@@ -26,7 +28,9 @@ class MaskedFrameLoss(Module):
         # input: (B, T)
         loss = []
         for i, frame in enumerate(n_frames):
-            loss.append(self.loss_fn(pred[i, :frame], true[i, :frame]))
+            f = int(frame.item())
+            max_t = min(pred.size(-1), true.size(-1), f)
+            loss.append(self.loss_fn(pred[i, :max_t], true[i, :max_t]))
         return torch.mean(torch.stack(loss))
 
 
@@ -40,8 +44,10 @@ class MaskedContrastLoss(Module):
         # input: (B, C, T)
         loss = []
         for i, frame in enumerate(n_frames):
+            f = int(frame.item())
+            max_t = min(pred1.size(-1), pred2.size(-1), f)
             # mean L2 distance squared
-            d = torch.dist(pred1[i, :, :frame], pred2[i, :, :frame], 2)
+            d = torch.dist(pred1[i, :, :max_t], pred2[i, :, :max_t], 2)
             if labels[i]:
                 # if is positive pair, minimize distance
                 loss.append(d ** 2)
@@ -60,7 +66,9 @@ class MaskedMSE(Module):
     def forward(self, pred: Tensor, true: Tensor, n_frames: Tensor):
         loss = []
         for i, frame in enumerate(n_frames):
-            loss.append(self.loss_fn(pred[i, :frame], true[i, :frame]))
+            f = int(frame.item())
+            max_t = min(pred.size(-1), true.size(-1), f)
+            loss.append(self.loss_fn(pred[i, :max_t], true[i, :max_t]))
         return torch.mean(torch.stack(loss))
 
 

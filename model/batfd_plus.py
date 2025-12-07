@@ -347,8 +347,9 @@ class BatfdPlus(LightningModule):
         a_start_label, v_start_label = cls.gen_audio_video_labels(fusion_start_label, meta)
         a_end_label, v_end_label = cls.gen_audio_video_labels(fusion_end_label, meta)
 
-        frame_label_real = torch.zeros(512)
-        frame_label_fake = torch.zeros(512)
+        frame_len = fusion_bm_label.size(1)
+        frame_label_real = torch.zeros(frame_len)
+        frame_label_fake = torch.zeros(frame_len)
         for begin, end in meta.fake_periods:
             begin = int(begin * 25)
             end = int(end * 25)

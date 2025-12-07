@@ -161,8 +161,9 @@ class Batfd(LightningModule):
         v_bm_label = label_fake if meta.modify_video else label_real
         a_bm_label = label_fake if meta.modify_audio else label_real
 
-        frame_label_real = torch.zeros(512)
-        frame_label_fake = torch.zeros(512)
+        frame_len = label_fake.size(1)
+        frame_label_real = torch.zeros(frame_len)
+        frame_label_fake = torch.zeros(frame_len)
         for begin, end in meta.fake_periods:
             begin = int(begin * 25)
             end = int(end * 25)

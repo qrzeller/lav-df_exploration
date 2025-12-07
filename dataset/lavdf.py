@@ -166,11 +166,19 @@ class Lavdf(Dataset):
     def __len__(self) -> int:
         return len(self.metadata)
 
-    @staticmethod
-    def _get_log_mel_spectrogram(audio: Tensor) -> Tensor:
-        ms = torchaudio.transforms.MelSpectrogram(n_fft=321, n_mels=64)
+    def _get_log_mel_spectrogram(self, audio: Tensor) -> Tensor:
+        # Ensure consistent temporal bins for the audio spectrogram regardless of frame padding.
+        # Use hop_length=160 (at 16kHz) which yields ~10ms hops.
+        ms = torchaudio.transforms.MelSpectrogram(n_fft=321, n_mels=64, hop_length=160)
         spec = torch.log(ms(audio[:, 0]) + 0.01)
-        assert spec.shape == (64, 2048), "Wrong log mel-spectrogram setup in Dataset"
+        # Enforce expected time bins for the audio encoder: 4x video frames
+        expected_bins = int(self.video_padding * 4)
+        t_bins = spec.shape[1]
+        if t_bins < expected_bins:
+            pad = expected_bins - t_bins
+            spec = torch.nn.functional.pad(spec, (0, pad))
+        elif t_bins > expected_bins:
+            spec = spec[:, :expected_bins]
         return spec
 
     def _get_train_label(self, frames, video_labels, temporal_scale, fps=25) -> T_LABEL:
