@@ -1,0 +1,34 @@
+python evaluate.py --config config/batfd_default.toml --data_root dataset/LAV-DF/LAV-DF --checkpoint output/ckpt/batfd_default.ckpt --batch_size 4 --num_workers 4
+Lightning automatically upgraded your loaded checkpoint from v1.7.7 to v2.6.0. To apply the upgrade to your files permanently, run `python -m lightning.pytorch.utilities.upgrade_checkpoint output/ckpt/batfd_default.ckpt`
+Load 78703 data in train.
+Load 31501 data in dev.
+Load 26100 data in test.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/csem/divm/users/qze/Code/lavdf/lav-df_exploration/.venv/lib64/python3.11/site-packages/torchvision/io/_video_deprecation_warning.py:9: UserWarning: The video decoding and encoding capabilities of torchvision are deprecated from version 0.22 and will be removed in version 0.24. We recommend that you migrate to TorchCodec, where we'll consolidate the future decoding/encoding capabilities of PyTorch: https://github.com/pytorch/torchcodec
+  warnings.warn(
+Predicting: |                                                                               | 0/? [00:00<?, ?it/s]/csem/divm/users/qze/Code/lavdf/lav-df_exploration/.venv/lib64/python3.11/site-packages/torchvision/io/_video_deprecation_warning.py:9: UserWarning: The video decoding and encoding capabilities of torchvision are deprecated from version 0.22 and will be removed in version 0.24. We recommend that you migrate to TorchCodec, where we'll consolidate the future decoding/encoding capabilities of PyTorch: https://github.com/pytorch/torchcodec
+  warnings.warn(
+/csem/divm/users/qze/Code/lavdf/lav-df_exploration/.venv/lib64/python3.11/site-packages/torchvision/io/_video_deprecation_warning.py:9: UserWarning: The video decoding and encoding capabilities of torchvision are deprecated from version 0.22 and will be removed in version 0.24. We recommend that you migrate to TorchCodec, where we'll consolidate the future decoding/encoding capabilities of PyTorch: https://github.com/pytorch/torchcodec
+  warnings.warn(
+/csem/divm/users/qze/Code/lavdf/lav-df_exploration/.venv/lib64/python3.11/site-packages/torchvision/io/_video_deprecation_warning.py:9: UserWarning: The video decoding and encoding capabilities of torchvision are deprecated from version 0.22 and will be removed in version 0.24. We recommend that you migrate to TorchCodec, where we'll consolidate the future decoding/encoding capabilities of PyTorch: https://github.com/pytorch/torchcodec
+  warnings.warn(
+Predicting DataLoader 0:   5%|▏   | 330/6525 [02:58<55:51,  1.85it/s]Predicting DataLoader 0: 100%|█████████████████████████████████████████| 6525/6525 [1:36:47<00:00,  1.12it/s]
+100%|██████████████████████████████████████████████████████████████████| 26100/26100 [15:12<00:00, 28.60it/s]
+Load 78703 data in train.
+Load 31501 data in dev.
+Load 26100 data in test.
+--------------------------------------------------
+100%|████████████████████████████████████████████████████████████████| 26100/26100 [00:04<00:00, 5682.53it/s]
+100%|████████████████████████████████████████████████████████████████| 26100/26100 [00:04<00:00, 5985.96it/s]
+100%|████████████████████████████████████████████████████████████████| 26100/26100 [00:04<00:00, 6398.84it/s]
+AP@0.5 Score for fusion modality in full set: 0.7916150689125061
+AP@0.75 Score for fusion modality in full set: 0.38578957319259644
+AP@0.95 Score for fusion modality in full set: 0.0024242501240223646
+--------------------------------------------------
+100%|████████████████████████████████████████████████████████████████| 26100/26100 [00:04<00:00, 5237.65it/s]
+AR@100 Score for fusion modality in full set: 0.6706129908561707
+AR@50 Score for fusion modality in full set: 0.6419166922569275
+AR@20 Score for fusion modality in full set: 0.6090210676193237
+AR@10 Score for fusion modality in full set: 0.585192084312439
