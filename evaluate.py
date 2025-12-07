@@ -4,6 +4,10 @@ import os
 import toml
 import torch
 
+# Use Tensor Cores for faster float32 matmul (trades a bit of precision for speed).
+# Options: 'medium' or 'high' (higher = more aggressive mixed-precision matmul).
+torch.set_float32_matmul_precision('high')
+
 from dataset.lavdf import LavdfDataModule
 from inference import inference_batfd
 from metrics import AP, AR
@@ -15,7 +19,7 @@ parser = argparse.ArgumentParser(description="BATFD evaluation")
 parser.add_argument("--config", type=str)
 parser.add_argument("--data_root", type=str)
 parser.add_argument("--checkpoint", type=str)
-parser.add_argument("--batch_size", type=int, default=4)
+parser.add_argument("--batch_size", type=int, default=8)
 parser.add_argument("--num_workers", type=int, default=8)
 parser.add_argument("--modalities", type=str, nargs="+", default=["fusion"])
 parser.add_argument("--subset", type=str, nargs="+", default=["full"])
