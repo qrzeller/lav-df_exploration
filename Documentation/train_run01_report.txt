@@ -1,0 +1,14 @@
+Training run report: run01
+==========================
+
+Command:
+python train.py --config config/batfd_default.toml --data_root dataset/LAV-DF/LAV-DF --gpus 1 --precision 16 --batch_size 4 --num_workers 20
+
+Notes:
+- Single-GPU run using automatic Lightning strategy.
+- Mixed precision (16-bit) enabled for faster training.
+- Checkpoints are saved under `output/ckpt/batfd_default`.
+
+To reproduce:
+- Ensure the LAV-DF dataset is available under `dataset/LAV-DF/LAV-DF`.
+- Run the command above from the project root.

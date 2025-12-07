@@ -112,6 +112,8 @@ if __name__ == '__main__':
         
     monitor = "val_fusion_bm_loss"
 
+    strategy = "ddp" if args.gpus and args.gpus > 1 else "auto"
+
     trainer = Trainer(log_every_n_steps=50, precision=precision, max_epochs=args.max_epochs,
         callbacks=[
             ModelCheckpoint(
@@ -124,7 +126,7 @@ if __name__ == '__main__':
         benchmark=True,
         accelerator="auto",
         devices=args.gpus,
-        strategy=None if args.gpus < 2 else "ddp",
+        strategy=strategy,
     )
 
     if args.resume:
