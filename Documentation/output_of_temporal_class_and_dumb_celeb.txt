@@ -1,0 +1,839 @@
+cd /local/user/qze/Code/lavdf/lav-df_exploration && source .venv/bin/activate && python -c "
+> import os
+> import numpy as np
+> import pandas as pd
+> from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score, average_precision_score
+> import toml
+> from utils import read_json
+> from dataset.fakeavceleb import FakeAVCelebDataModule
+> from model.batfd import Batfd
+> 
+> config = toml.load('config/batfd_fakeavceleb.toml')
+> data_root = 'dataset/multimodal-time-localisation/FakeAVCeleb_v1.2/FakeAVCeleb_v1.2'
+> 
+> dm = FakeAVCelebDataModule(root=data_root, frame_padding=config['num_frames'], require_match_scores=False,
+>     max_duration=config['max_duration'], batch_size=1, num_workers=1, get_meta_attr=Batfd.get_meta_attr, return_file_name=True)
+> dm.setup()
+> 
+> model_name = config['name']
+> proposals = read_json(f'output/results/{model_name}.json')
+> 
+> csv_dir = f'output/results/{model_name}'
+> csv_files = set([f.replace('.csv', '.mp4') for f in os.listdir(csv_dir) if f.endswith('.csv')])
+> all_metadata = dm.test_dataset.metadata
+> metadata = [m for m in all_metadata if m.file.split('/')[-1] in csv_files]
+> 
+> # Extract video-level scores
+> video_scores = []
+> for meta in metadata:
+>     video_file = meta.file
+>     is_fake = meta.n_fakes > 0
+>     
+>     if video_file in proposals:
+>         video_proposals = proposals[video_file]
+>         max_score = max([p[0] for p in video_proposals]) if len(video_proposals) > 0 else 0.0
+>     else:
+>         max_score = 0.0
+>     
+>     parts = video_file.split('/')
+>     category = parts[0] if len(parts) >= 1 else 'Unknown'
+>     race = parts[1] if len(parts) >= 2 else 'Unknown'
+>     
+>     video_scores.append({
+>         'file': video_file,
+>         'is_fake': is_fake,
+>         'max_score': max_score,
+>         'category': category,
+>         'race': race
+>     })
+> 
+> df = pd.DataFrame(video_scores)
+> 
+> # Per-category analysis
+> print('='*80)
+> print('PER-CATEGORY BINARY CLASSIFICATION RESULTS')
+> print('='*80)
+> 
+> for category in sorted(df['category'].unique()):
+>     cat_df = df[df['category'] == category]
+>     y_true = cat_df['is_fake'].values
+>     y_scores = cat_df['max_score'].values
+>     
+>     if y_true.sum() == 0 or y_true.sum() == len(y_true):
+>         # All same class
+>         print(f'\n{category} (n={len(cat_df)}):')
+>         print(f'  All same class - cannot compute AUC')
+>         continue
+>     
+>     auc = roc_auc_score(y_true, y_scores)
+>     ap = average_precision_score(y_true, y_scores)
+>     
+>     # Use best threshold from overall (0.05)
+>     threshold = 0.05
+>     y_pred = (y_scores >= threshold).astype(int)
+>     acc = accuracy_score(y_true, y_pred)
+>     prec, rec, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='binary', zero_division=0)
+>     
+>     print(f'\n{category} (n={len(cat_df)}):')
+>     print(f'  AUC-ROC: {auc:.4f}')
+>     print(f'  AP: {ap:.4f}')
+>     print(f'  @ threshold=0.05: Acc={acc:.4f}, Prec={prec:.4f}, Rec={rec:.4f}, F1={f1:.4f}')
+>     print(f'  Mean score (fake): {cat_df[cat_df[\"is_fake\"]==True][\"max_score\"].mean():.4f}')
+>     print(f'  Mean score (real): {cat_df[cat_df[\"is_fake\"]==False][\"max_score\"].mean() if len(cat_df[cat_df[\"is_fake\"]==False]) > 0 else 0:.4f}')
+> 
+> # Per-race analysis
+> print('\n' + '='*80)
+> print('PER-RACE BINARY CLASSIFICATION RESULTS')
+> print('='*80)
+> 
+> for race in sorted(df['race'].unique()):
+>     race_df = df[df['race'] == race]
+>     y_true = race_df['is_fake'].values
+>     y_scores = race_df['max_score'].values
+>     
+>     if y_true.sum() == 0 or y_true.sum() == len(y_true):
+>         continue
+>     
+>     auc = roc_auc_score(y_true, y_scores)
+>     ap = average_precision_score(y_true, y_scores)
+>     
+>     threshold = 0.05
+>     y_pred = (y_scores >= threshold).astype(int)
+>     acc = accuracy_score(y_true, y_pred)
+>     prec, rec, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='binary', zero_division=0)
+>     
+>     print(f'\n{race} (n={len(race_df)}):')
+>     print(f'  AUC-ROC: {auc:.4f}')
+>     print(f'  AP: {ap:.4f}')
+>     print(f'  @ threshold=0.05: Acc={acc:.4f}, Prec={prec:.4f}, Rec={rec:.4f}, F1={f1:.4f}')
+> 
+> print('='*80)
+> " 2>&1 | tee -a /tmp/fakeavceleb_binary_eval.txt
+Load 0 data in train.
+Load 0 data in dev.
+Load 21566 data in test.
+================================================================================
+PER-CATEGORY BINARY CLASSIFICATION RESULTS
+================================================================================
+
+FakeVideo-FakeAudio (n=10856):
+  All same class - cannot compute AUC
+
+FakeVideo-RealAudio (n=9709):
+  All same class - cannot compute AUC
+
+RealVideo-FakeAudio (n=500):
+  All same class - cannot compute AUC
+
+RealVideo-RealAudio (n=500):
+  All same class - cannot compute AUC
+
+================================================================================
+PER-RACE BINARY CLASSIFICATION RESULTS
+================================================================================
+
+African (n=4097):
+  AUC-ROC: 0.7765
+  AP: 0.9920
+  @ threshold=0.05: Acc=0.9485, Prec=0.9771, Rec=0.9700, F1=0.9735
+
+Asian (East) (n=3498):
+  AUC-ROC: 0.7597
+  AP: 0.9903
+  @ threshold=0.05: Acc=0.9563, Prec=0.9729, Rec=0.9823, F1=0.9776
+
+Asian (South) (n=4413):
+  AUC-ROC: 0.7307
+  AP: 0.9892
+  @ threshold=0.05: Acc=0.9529, Prec=0.9794, Rec=0.9722, F1=0.9758
+
+Caucasian (American) (n=4864):
+  AUC-ROC: 0.7463
+  AP: 0.9924
+  @ threshold=0.05: Acc=0.9628, Prec=0.9805, Rec=0.9815, F1=0.9810
+
+Caucasian (European) (n=4693):
+  AUC-ROC: 0.7523
+  AP: 0.9919
+  @ threshold=0.05: Acc=0.9655, Prec=0.9796, Rec=0.9852, F1=0.9824
+================================================================================
+(.venv) [qze@cm707ll lav-df_exploration]$ cd /local/user/qze/Code/lavdf/lav-df_exploration && source .venv/bin/activate && python -c "
+> import os
+> import numpy as np
+> import pandas as pd
+> from sklearn.metrics import (accuracy_score, precision_recall_fscore_support, roc_auc_score, 
+>                              average_precision_score, confusion_matrix, balanced_accuracy_score,
+>                              cohen_kappa_score, matthews_corrcoef)
+> import toml
+> from utils import read_json
+> from dataset.fakeavceleb import FakeAVCelebDataModule
+> from model.batfd import Batfd
+> 
+> config = toml.load('config/batfd_fakeavceleb.toml')
+> data_root = 'dataset/multimodal-time-localisation/FakeAVCeleb_v1.2/FakeAVCeleb_v1.2'
+> 
+> dm = FakeAVCelebDataModule(root=data_root, frame_padding=config['num_frames'], require_match_scores=False,
+>     max_duration=config['max_duration'], batch_size=1, num_workers=1, get_meta_attr=Batfd.get_meta_attr, return_file_name=True)
+> dm.setup()
+> 
+> model_name = config['name']
+> proposals = read_json(f'output/results/{model_name}.json')
+> 
+> csv_dir = f'output/results/{model_name}'
+> csv_files = set([f.replace('.csv', '.mp4') for f in os.listdir(csv_dir) if f.endswith('.csv')])
+> all_metadata = dm.test_dataset.metadata
+> metadata = [m for m in all_metadata if m.file.split('/')[-1] in csv_files]
+> 
+> # Extract scores
+> video_scores = []
+> for meta in metadata:
+>     video_file = meta.file
+>     is_fake = meta.n_fakes > 0
+>     
+>     if video_file in proposals:
+>         video_proposals = proposals[video_file]
+>         max_score = max([p[0] for p in video_proposals]) if len(video_proposals) > 0 else 0.0
+>     else:
+>         max_score = 0.0
+>     
+>     parts = video_file.split('/')
+>     category = parts[0] if len(parts) >= 1 else 'Unknown'
+>     race = parts[1] if len(parts) >= 2 else 'Unknown'
+>     
+>     video_scores.append({
+>         'file': video_file,
+>         'is_fake': is_fake,
+>         'max_score': max_score,
+>         'category': category,
+>         'race': race
+>     })
+> 
+> df = pd.DataFrame(video_scores)
+> 
+> print('='*80)
+> print('IMBALANCED CLASSIFICATION EVALUATION')
+> print('='*80)
+> print(f'\nDataset Imbalance:')
+> print(f'  Real videos: {len(df[df[\"is_fake\"]==False])} (2.32%)')
+> print(f'  Fake videos: {len(df[df[\"is_fake\"]==True])} (97.68%)')
+> print(f'  Imbalance ratio: 1:{len(df[df[\"is_fake\"]==True]) / len(df[df[\"is_fake\"]==False]):.1f}')
+> 
+> y_true = df['is_fake'].values
+> y_scores = df['max_score'].values
+> 
+> # Baseline: always predict majority class (fake)
+> baseline_acc = y_true.sum() / len(y_true)
+> print(f'\nBaseline (always predict fake):')
+> print(f'  Accuracy: {baseline_acc:.4f} (97.68%)')
+> print(f'  This is what a naive model would achieve!')
+> 
+> # Threshold-independent metrics
+> print(f'\n{\"=\"*80}')
+> print('THRESHOLD-INDEPENDENT METRICS (Recommended for Imbalanced Data)')
+> print(f'{\"=\"*80}')
+> 
+> auc_score = roc_auc_score(y_true, y_scores)
+> ap_score = average_precision_score(y_true, y_scores)
+> 
+> print(f'\nAUC-ROC: {auc_score:.4f}')
+> print(f'  Interpretation: {auc_score:.1%} chance model ranks random fake higher than random real')
+> print(f'  Range: [0.5, 1.0] where 0.5 = random, 1.0 = perfect')
+> print(f'  Assessment: {\"Good\" if auc_score > 0.7 else \"Fair\" if auc_score > 0.6 else \"Poor\"}')
+> 
+> print(f'\nAverage Precision (AP): {ap_score:.4f}')
+> print(f'  Interpretation: Area under Precision-Recall curve')
+> print(f'  Baseline (random): {y_true.sum() / len(y_true):.4f} (proportion of positives)')
+> print(f'  Improvement over random: {(ap_score - y_true.sum()/len(y_true))/(1 - y_true.sum()/len(y_true)):.1%}')
+> 
+> print(f'\n{\"=\"*80}')
+> print('THRESHOLD-DEPENDENT METRICS AT DIFFERENT OPERATING POINTS')
+> print(f'{\"=\"*80}')
+> 
+> thresholds = [0.01, 0.05, 0.10, 0.15, 0.20]
+> print(f'\n{\"Thresh\":>6} | {\"Acc\":>6} | {\"Bal.Acc\":>8} | {\"Prec\":>6} | {\"Rec\":>6} | {\"Spec\":>6} | {\"F1\":>6} | {\"MCC\":>6} | {\"Kappa\":>6} | {\"TN\":>4} | {\"FP\":>4} | {\"FN\":>5} | {\"TP\":>5}')
+> print('='*140)
+> 
+> best_metrics = {}
+> for metric_name in ['balanced_accuracy', 'f1', 'mcc', 'kappa']:
+>     best_metrics[metric_name] = {'score': -1, 'threshold': 0}
+> 
+> for threshold in thresholds:
+>     y_pred = (y_scores >= threshold).astype(int)
+>     
+>     # Confusion matrix
+>     tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+>     
+>     # Basic metrics
+>     acc = accuracy_score(y_true, y_pred)
+>     prec, rec, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='binary', zero_division=0)
+>     
+>     # Imbalanced-aware metrics
+>     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+>     balanced_acc = balanced_accuracy_score(y_true, y_pred)
+>     mcc = matthews_corrcoef(y_true, y_pred)
+>     kappa = cohen_kappa_score(y_true, y_pred)
+>     
+>     print(f'{threshold:>6.2f} | {acc:>6.4f} | {balanced_acc:>8.4f} | {prec:>6.4f} | {rec:>6.4f} | {specificity:>6.4f} | {f1:>6.4f} | {mcc:>6.4f} | {kappa:>6.4f} | {tn:>4d} | {fp:>4d} | {fn:>5d} | {tp:>5d}')
+>     
+>     # Track best scores
+>     if balanced_acc > best_metrics['balanced_accuracy']['score']:
+>         best_metrics['balanced_accuracy'] = {'score': balanced_acc, 'threshold': threshold}
+>     if f1 > best_metrics['f1']['score']:
+>         best_metrics['f1'] = {'score': f1, 'threshold': threshold}
+>     if mcc > best_metrics['mcc']['score']:
+>         best_metrics['mcc'] = {'score': mcc, 'threshold': threshold}
+>     if kappa > best_metrics['kappa']['score']:
+>         best_metrics['kappa'] = {'score': kappa, 'threshold': threshold}
+> 
+> print(f'\n{\"=\"*80}')
+> print('METRIC DEFINITIONS (for Imbalanced Classification)')
+> print(f'{\"=\"*80}')
+> print('''
+> Accuracy:          Correct predictions / Total (MISLEADING for imbalanced data!)
+bash: !: event not found
+> Balanced Accuracy: Average of Recall and Specificity (handles imbalance better)
+> Precision:         TP / (TP + FP) - When model says fake, how often is it right?
+> Recall:            TP / (TP + FN) - Of all fakes, how many did we catch?
+> Specificity:       TN / (TN + FP) - Of all reals, how many did we correctly identify?
+> F1:                Harmonic mean of Precision and Recall
+> MCC:               Matthews Correlation Coefficient (-1 to +1, accounts for imbalance)
+> Kappa:             Cohen's Kappa (inter-rater agreement, accounts for chance)
+> ''')
+> 
+> print(f'{\"=\"*80}')
+> print('BEST THRESHOLDS BY METRIC')
+> print(f'{\"=\"*80}')
+> for metric_name, info in best_metrics.items():
+>     print(f'{metric_name.replace(\"_\", \" \").title():>20s}: {info[\"score\"]:.4f} @ threshold={info[\"threshold\"]:.2f}')
+> 
+> print(f'\n{\"=\"*80}')
+> print('RECOMMENDED OPERATING POINTS')
+> print(f'{\"=\"*80}')
+> print('''
+> 1. HIGH RECALL (catch most fakes, accept more false alarms):
+>    Threshold: 0.01
+>    Use case: Critical security applications, zero-tolerance for missed fakes
+> 
+> 2. BALANCED (balance precision and recall):
+>    Threshold: 0.05
+>    Use case: General-purpose deepfake detection
+> 
+> 3. HIGH PRECISION (minimize false alarms, accept missing some fakes):
+>    Threshold: 0.15
+>    Use case: Content moderation where false accusations are costly
+> ''')
+> 
+> # Class-specific performance
+> print(f'\n{\"=\"*80}')
+> print('CLASS-SPECIFIC PERFORMANCE AT THRESHOLD=0.05')
+> print(f'{\"=\"*80}')
+> 
+> threshold = 0.05
+> y_pred = (y_scores >= threshold).astype(int)
+> tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+> 
+> real_total = tn + fp
+> fake_total = fn + tp
+> 
+> print(f'\nREAL VIDEOS (minority class, n={real_total}):')
+> print(f'  True Negatives:  {tn:>4d} ({tn/real_total:>6.2%}) - Correctly identified as real')
+> print(f'  False Positives: {fp:>4d} ({fp/real_total:>6.2%}) - Incorrectly flagged as fake')
+> print(f'  Specificity:     {tn/real_total:.4f} (ability to detect real videos)')
+> 
+> print(f'\nFAKE VIDEOS (majority class, n={fake_total}):')
+> print(f'  True Positives:  {tp:>5d} ({tp/fake_total:>6.2%}) - Correctly identified as fake')
+> print(f'  False Negatives: {fn:>5d} ({fn/fake_total:>6.2%}) - Missed fakes')
+> print(f'  Recall:          {tp/fake_total:.4f} (ability to detect fake videos)')
+> 
+> print(f'\n{\"=\"*80}')
+> " 2>&1 | tee /tmp/fakeavceleb_imbalanced_eval.txt
+Load 0 data in train.
+Load 0 data in dev.
+Load 21566 data in test.
+================================================================================
+IMBALANCED CLASSIFICATION EVALUATION
+================================================================================
+
+Dataset Imbalance:
+  Real videos: 500 (2.32%)
+  Fake videos: 21065 (97.68%)
+  Imbalance ratio: 1:42.1
+
+Baseline (always predict fake):
+  Accuracy: 0.9768 (97.68%)
+  This is what a naive model would achieve!
+
+================================================================================
+THRESHOLD-INDEPENDENT METRICS (Recommended for Imbalanced Data)
+================================================================================
+
+AUC-ROC: 0.7533
+  Interpretation: 75.3% chance model ranks random fake higher than random real
+  Range: [0.5, 1.0] where 0.5 = random, 1.0 = perfect
+  Assessment: Good
+
+Average Precision (AP): 0.9912
+  Interpretation: Area under Precision-Recall curve
+  Baseline (random): 0.9768 (proportion of positives)
+  Improvement over random: 62.1%
+
+================================================================================
+THRESHOLD-DEPENDENT METRICS AT DIFFERENT OPERATING POINTS
+================================================================================
+
+Thresh |    Acc |  Bal.Acc |   Prec |    Rec |   Spec |     F1 |    MCC |  Kappa |   TN |   FP |    FN |    TP
+============================================================================================================================================
+  0.01 | 0.9768 |   0.5000 | 0.9768 | 1.0000 | 0.0000 | 0.9883 | 0.0000 | 0.0000 |    0 |  500 |     0 | 21065
+  0.05 | 0.9576 |   0.5302 | 0.9782 | 0.9784 | 0.0820 | 0.9783 | 0.0605 | 0.0605 |   41 |  459 |   456 | 20609
+  0.10 | 0.8642 |   0.6337 | 0.9838 | 0.8754 | 0.3920 | 0.9265 | 0.1194 | 0.0819 |  196 |  304 |  2624 | 18441
+  0.15 | 0.7663 |   0.6861 | 0.9879 | 0.7702 | 0.6020 | 0.8656 | 0.1315 | 0.0673 |  301 |  199 |  4840 | 16225
+  0.20 | 0.6587 |   0.6964 | 0.9905 | 0.6568 | 0.7360 | 0.7899 | 0.1238 | 0.0495 |  368 |  132 |  7229 | 13836
+
+================================================================================
+METRIC DEFINITIONS (for Imbalanced Classification)
+================================================================================
+
+Balanced Accuracy: Average of Recall and Specificity (handles imbalance better)
+Precision:         TP / (TP + FP) - When model says fake, how often is it right?
+Recall:            TP / (TP + FN) - Of all fakes, how many did we catch?
+Specificity:       TN / (TN + FP) - Of all reals, how many did we correctly identify?
+F1:                Harmonic mean of Precision and Recall
+MCC:               Matthews Correlation Coefficient (-1 to +1, accounts for imbalance)
+Kappa:             Cohen's Kappa (inter-rater agreement, accounts for chance)
+
+================================================================================
+BEST THRESHOLDS BY METRIC
+================================================================================
+   Balanced Accuracy: 0.6964 @ threshold=0.20
+                  F1: 0.9883 @ threshold=0.01
+                 Mcc: 0.1315 @ threshold=0.15
+               Kappa: 0.0819 @ threshold=0.10
+
+================================================================================
+RECOMMENDED OPERATING POINTS
+================================================================================
+
+1. HIGH RECALL (catch most fakes, accept more false alarms):
+   Threshold: 0.01
+   Use case: Critical security applications, zero-tolerance for missed fakes
+
+2. BALANCED (balance precision and recall):
+   Threshold: 0.05
+   Use case: General-purpose deepfake detection
+
+3. HIGH PRECISION (minimize false alarms, accept missing some fakes):
+   Threshold: 0.15
+   Use case: Content moderation where false accusations are costly
+
+
+================================================================================
+CLASS-SPECIFIC PERFORMANCE AT THRESHOLD=0.05
+================================================================================
+
+REAL VIDEOS (minority class, n=500):
+  True Negatives:    41 ( 8.20%) - Correctly identified as real
+  False Positives:  459 (91.80%) - Incorrectly flagged as fake
+  Specificity:     0.0820 (ability to detect real videos)
+
+FAKE VIDEOS (majority class, n=21065):
+  True Positives:  20609 (97.84%) - Correctly identified as fake
+  False Negatives:   456 ( 2.16%) - Missed fakes
+  Recall:          0.9784 (ability to detect fake videos)
+
+================================================================================
+(.venv) [qze@cm707ll lav-df_exploration]$ cd /local/user/qze/Code/lavdf/lav-df_exploration && source .venv/bin/activate && python -c "
+> import os
+> import numpy as np
+> import pandas as pd
+> from sklearn.metrics import roc_auc_score, average_precision_score, balanced_accuracy_score, matthews_corrcoef
+> from scipy.stats import entropy, ks_2samp
+> import toml
+> from utils import read_json
+> from dataset.fakeavceleb import FakeAVCelebDataModule
+> from model.batfd import Batfd
+> 
+> config = toml.load('config/batfd_fakeavceleb.toml')
+> data_root = 'dataset/multimodal-time-localisation/FakeAVCeleb_v1.2/FakeAVCeleb_v1.2'
+> 
+> dm = FakeAVCelebDataModule(root=data_root, frame_padding=config['num_frames'], require_match_scores=False,
+>     max_duration=config['max_duration'], batch_size=1, num_workers=1, get_meta_attr=Batfd.get_meta_attr, return_file_name=True)
+> dm.setup()
+> 
+> model_name = config['name']
+> csv_dir = f'output/results/{model_name}'
+> 
+> # Load all CSV files to get temporal scores
+> print('='*80)
+> print('TEMPORAL DISTRIBUTION ANALYSIS')
+> print('='*80)
+> print('\nLoading temporal boundary scores from CSV files...')
+> 
+> temporal_features = []
+> csv_files = [f for f in os.listdir(csv_dir) if f.endswith('.csv')]
+> 
+> for i, csv_file in enumerate(csv_files):
+>     if i % 5000 == 0:
+>         print(f'  Processing {i}/{len(csv_files)}...')
+>     
+>     video_file = csv_file.replace('.csv', '.mp4')
+>     csv_path = os.path.join(csv_dir, csv_file)
+>     
+>     # Find metadata
+>     meta = None
+>     for m in dm.test_dataset.metadata:
+>         if m.file.split('/')[-1] == video_file:
+>             meta = m
+>             break
+>     
+>     if meta is None:
+>         continue
+>     
+>     is_fake = meta.n_fakes > 0
+>     
+>     # Read temporal scores
+>     df = pd.read_csv(csv_path)
+>     if len(df) == 0:
+>         continue
+>     
+>     scores = df['score'].values
+>     
+>     # Compute temporal features
+>     features = {
+>         'file': video_file,
+>         'is_fake': is_fake,
+>         'n_proposals': len(scores),
+>         
+>         # Score statistics
+>         'mean_score': np.mean(scores),
+>         'std_score': np.std(scores),
+>         'max_score': np.max(scores),
+>         'min_score': np.min(scores),
+>         'median_score': np.median(scores),
+>         'q25_score': np.percentile(scores, 25),
+>         'q75_score': np.percentile(scores, 75),
+>         'iqr_score': np.percentile(scores, 75) - np.percentile(scores, 25),
+>         
+>         # Distribution shape
+>         'skew': pd.Series(scores).skew(),
+>         'kurtosis': pd.Series(scores).kurtosis(),
+>         'entropy': entropy(np.histogram(scores, bins=20)[0] + 1e-10),  # +eps for stability
+>         
+>         # Temporal variability
+>         'score_range': np.max(scores) - np.min(scores),
+>         'coef_variation': np.std(scores) / (np.mean(scores) + 1e-10),
+>         
+>         # High-score concentration
+>         'pct_high_scores': np.mean(scores > 0.5),
+>         'pct_medium_scores': np.mean((scores > 0.1) & (scores <= 0.5)),
+>         'pct_low_scores': np.mean(scores <= 0.1),
+>         
+>         # Temporal patterns (if enough proposals)
+>         'first_half_mean': np.mean(scores[:len(scores)//2]) if len(scores) >= 4 else np.mean(scores),
+>         'second_half_mean': np.mean(scores[len(scores)//2:]) if len(scores) >= 4 else np.mean(scores),
+>         'temporal_diff': abs(np.mean(scores[:len(scores)//2]) - np.mean(scores[len(scores)//2:])) if len(scores) >= 4 else 0,
+>     }
+>     
+>     temporal_features.append(features)
+> 
+> df_features = pd.DataFrame(temporal_features)
+> print(f'\nProcessed {len(df_features)} videos with temporal features')
+> 
+> real_df = df_features[df_features['is_fake'] == False]
+> fake_df = df_features[df_features['is_fake'] == True]
+> 
+> print(f'\n  Real videos: {len(real_df)}')
+> print(f'  Fake videos: {len(fake_df)}')
+> 
+> # Analyze each feature
+> print('\n' + '='*80)
+> print('FEATURE COMPARISON: REAL vs FAKE VIDEOS')
+> print('='*80)
+> 
+> feature_cols = [col for col in df_features.columns if col not in ['file', 'is_fake']]
+> 
+> print(f'\n{\"Feature\":>25} | {\"Real Mean\":>12} | {\"Fake Mean\":>12} | {\"Difference\":>12} | {\"KS p-value\":>12} | {\"Significant?\":>12}')
+> print('='*100)
+> 
+> significant_features = []
+> 
+> for feature in feature_cols:
+>     real_vals = real_df[feature].values
+>     fake_vals = fake_df[feature].values
+>     
+>     # Remove NaN/Inf
+>     real_vals = real_vals[np.isfinite(real_vals)]
+>     fake_vals = fake_vals[np.isfinite(fake_vals)]
+>     
+>     if len(real_vals) == 0 or len(fake_vals) == 0:
+>         continue
+>     
+>     real_mean = np.mean(real_vals)
+>     fake_mean = np.mean(fake_vals)
+>     diff = fake_mean - real_mean
+>     
+>     # Kolmogorov-Smirnov test for distribution difference
+>     ks_stat, ks_pval = ks_2samp(real_vals, fake_vals)
+>     
+>     is_sig = 'YES' if ks_pval < 0.01 else 'no'
+>     
+>     print(f'{feature:>25} | {real_mean:>12.6f} | {fake_mean:>12.6f} | {diff:>+12.6f} | {ks_pval:>12.6e} | {is_sig:>12}')
+>     
+>     if ks_pval < 0.01:
+>         significant_features.append({
+>             'feature': feature,
+>             'ks_pval': ks_pval,
+>             'diff': abs(diff),
+>             'real_mean': real_mean,
+>             'fake_mean': fake_mean
+>         })
+> 
+> # Sort by effect size
+> significant_features.sort(key=lambda x: x['diff'], reverse=True)
+> 
+> print('\n' + '='*80)
+> print('TOP DISCRIMINATIVE FEATURES (sorted by effect size)')
+> print('='*80)
+> 
+> for feat in significant_features[:10]:
+>     print(f'\n{feat[\"feature\"]}:')
+>     print(f'  Real mean: {feat[\"real_mean\"]:.6f}')
+>     print(f'  Fake mean: {feat[\"fake_mean\"]:.6f}')
+>     print(f'  Difference: {feat[\"diff\"]:.6f}')
+>     print(f'  KS p-value: {feat[\"ks_pval\"]:.2e}')
+> 
+> # Build classifiers using different feature sets
+> print('\n' + '='*80)
+> print('CLASSIFICATION WITH TEMPORAL FEATURES')
+ensemble import RandomForestClassifier
+from sklear> print('='*80)
+> 
+> from sklearn.ensemble import RandomForestClassifier
+> from sklearn.model_selection import cross_val_score
+> 
+> y_true = df_features['is_fake'].values
+> 
+> # 1. Baseline: max_score only
+> X_baseline = df_features[['max_score']].values
+> baseline_auc = roc_auc_score(y_true, X_baseline.ravel())
+> 
+> print(f'\n1. BASELINE (max_score only):')
+> print(f'   AUC-ROC: {baseline_auc:.4f}')
+> 
+> # 2. Temporal distribution features
+> distribution_features = ['mean_score', 'std_score', 'median_score', 'iqr_score', 'skew', 'kurtosis', 'entropy', 'coef_variation']
+> X_distribution = df_features[distribution_features].fillna(0).values
+> 
+> clf = RandomForestClassifier(n_estimators=100, random_state=42, max_depth=5)
+> cv_scores = cross_val_score(clf, X_distribution, y_true, cv=5, scoring='roc_auc')
+> 
+> print(f'\n2. DISTRIBUTION FEATURES (mean, std, skew, kurtosis, entropy, etc.):')
+> print(f'   Cross-val AUC-ROC: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}')
+> print(f'   Improvement over baseline: {(cv_scores.mean() - baseline_auc):.4f}')
+> 
+> # 3. Temporal pattern features
+> temporal_features_list = ['first_half_mean', 'second_half_mean', 'temporal_diff', 'pct_high_scores', 'pct_medium_scores', 'pct_low_scores']
+> X_temporal = df_features[temporal_features_list].fillna(0).values
+> 
+> clf2 = RandomForestClassifier(n_estimators=100, random_state=42, max_depth=5)
+> cv_scores2 = cross_val_score(clf2, X_temporal, y_true, cv=5, scoring='roc_auc')
+> 
+> print(f'\n3. TEMPORAL PATTERN FEATURES (first/second half, score distribution):')
+> print(f'   Cross-val AUC-ROC: {cv_scores2.mean():.4f} ± {cv_scores2.std():.4f}')
+> print(f'   Improvement over baseline: {(cv_scores2.mean() - baseline_auc):.4f}')
+> 
+> # 4. All features combined
+> all_features_list = distribution_features + temporal_features_list + ['max_score', 'score_range', 'n_proposals']
+> X_all = df_features[all_features_list].fillna(0).values
+> 
+> clf3 = RandomForestClassifier(n_estimators=100, random_state=42, max_depth=5)
+> cv_scores3 = cross_val_score(clf3, X_all, y_true, cv=5, scoring='roc_auc')
+> 
+> print(f'\n4. ALL FEATURES COMBINED:')
+> print(f'   Cross-val AUC-ROC: {cv_scores3.mean():.4f} ± {cv_scores3.std():.4f}')
+> print(f'   Improvement over baseline: {(cv_scores3.mean() - baseline_auc):.4f}')
+> 
+> # Feature importance
+> clf3.fit(X_all, y_true)
+> feature_importance = pd.DataFrame({
+>     'feature': all_features_list,
+>     'importance': clf3.feature_importances_
+> }).sort_values('importance', ascending=False)
+> 
+> print('\n' + '='*80)
+> print('FEATURE IMPORTANCE (Random Forest)')
+> print('='*80)
+> print(feature_importance.to_string(index=False))
+> 
+> print('\n' + '='*80)
+> print('CONCLUSIONS')
+> print('='*80)
+> print(f'''
+> 1. Baseline (max_score only):       AUC = {baseline_auc:.4f}
+> 2. With distribution features:      AUC = {cv_scores.mean():.4f} ({(cv_scores.mean() - baseline_auc)*100:+.1f}% change)
+> 3. With temporal pattern features:  AUC = {cv_scores2.mean():.4f} ({(cv_scores2.mean() - baseline_auc)*100:+.1f}% change)
+> 4. With all features combined:      AUC = {cv_scores3.mean():.4f} ({(cv_scores3.mean() - baseline_auc)*100:+.1f}% change)
+> 
+> Temporal distribution {'DOES' if max(cv_scores.mean(), cv_scores2.mean(), cv_scores3.mean()) > baseline_auc + 0.01 else 'does NOT'} provide significant improvement over simple max score.
+> ''')
+> 
+> " 2>&1 | tee /tmp/fakeavceleb_temporal_distribution_analysis.txt
+Load 0 data in train.
+Load 0 data in dev.
+Load 21566 data in test.
+================================================================================
+TEMPORAL DISTRIBUTION ANALYSIS
+================================================================================
+
+Loading temporal boundary scores from CSV files...
+  Processing 0/18394...
+  Processing 5000/18394...
+  Processing 10000/18394...
+  Processing 15000/18394...
+
+Processed 18394 videos with temporal features
+
+  Real videos: 178
+  Fake videos: 18216
+
+================================================================================
+FEATURE COMPARISON: REAL vs FAKE VIDEOS
+================================================================================
+
+                  Feature |    Real Mean |    Fake Mean |   Difference |   KS p-value | Significant?
+====================================================================================================
+              n_proposals |  9036.606742 |  9018.184783 |   -18.421959 | 1.000000e+00 |           no
+               mean_score |     0.007594 |     0.014547 |    +0.006953 | 2.009391e-37 |          YES
+                std_score |     0.009185 |     0.024798 |    +0.015613 | 1.187955e-46 |          YES
+                max_score |     0.139723 |     0.263214 |    +0.123491 | 1.544100e-37 |          YES
+                min_score |     0.000136 |     0.000146 |    +0.000010 | 2.164801e-02 |           no
+             median_score |     0.004881 |     0.005585 |    +0.000704 | 5.901637e-04 |          YES
+                q25_score |     0.002838 |     0.002735 |    -0.000103 | 2.981996e-02 |           no
+                q75_score |     0.009220 |     0.015429 |    +0.006209 | 5.142460e-29 |          YES
+                iqr_score |     0.006382 |     0.012694 |    +0.006312 | 8.591392e-39 |          YES
+                     skew |     4.870484 |     4.575122 |    -0.295362 | 2.647304e-04 |          YES
+                 kurtosis |    55.728968 |    36.645329 |   -19.083640 | 3.682814e-07 |          YES
+                  entropy |     1.151456 |     1.046359 |    -0.105097 | 1.619926e-06 |          YES
+              score_range |     0.139586 |     0.263068 |    +0.123481 | 1.749453e-37 |          YES
+           coef_variation |     1.150535 |     1.600011 |    +0.449476 | 1.265931e-29 |          YES
+          pct_high_scores |     0.000000 |     0.000075 |    +0.000075 | 9.325987e-01 |           no
+        pct_medium_scores |     0.003156 |     0.025204 |    +0.022049 | 3.277347e-42 |          YES
+           pct_low_scores |     0.996844 |     0.974721 |    -0.022123 | 3.277347e-42 |          YES
+          first_half_mean |     0.009897 |     0.022287 |    +0.012390 | 4.872090e-41 |          YES
+         second_half_mean |     0.005291 |     0.006808 |    +0.001517 | 9.438788e-06 |          YES
+            temporal_diff |     0.005509 |     0.016304 |    +0.010795 | 3.606859e-30 |          YES
+
+================================================================================
+TOP DISCRIMINATIVE FEATURES (sorted by effect size)
+================================================================================
+
+kurtosis:
+  Real mean: 55.728968
+  Fake mean: 36.645329
+  Difference: 19.083640
+  KS p-value: 3.68e-07
+
+coef_variation:
+  Real mean: 1.150535
+  Fake mean: 1.600011
+  Difference: 0.449476
+  KS p-value: 1.27e-29
+
+skew:
+  Real mean: 4.870484
+  Fake mean: 4.575122
+  Difference: 0.295362
+  KS p-value: 2.65e-04
+
+max_score:
+  Real mean: 0.139723
+  Fake mean: 0.263214
+  Difference: 0.123491
+  KS p-value: 1.54e-37
+
+score_range:
+  Real mean: 0.139586
+  Fake mean: 0.263068
+  Difference: 0.123481
+  KS p-value: 1.75e-37
+
+entropy:
+  Real mean: 1.151456
+  Fake mean: 1.046359
+  Difference: 0.105097
+  KS p-value: 1.62e-06
+
+pct_low_scores:
+  Real mean: 0.996844
+  Fake mean: 0.974721
+  Difference: 0.022123
+  KS p-value: 3.28e-42
+
+pct_medium_scores:
+  Real mean: 0.003156
+  Fake mean: 0.025204
+  Difference: 0.022049
+  KS p-value: 3.28e-42
+
+std_score:
+  Real mean: 0.009185
+  Fake mean: 0.024798
+  Difference: 0.015613
+  KS p-value: 1.19e-46
+
+first_half_mean:
+  Real mean: 0.009897
+  Fake mean: 0.022287
+  Difference: 0.012390
+  KS p-value: 4.87e-41
+
+================================================================================
+CLASSIFICATION WITH TEMPORAL FEATURES
+================================================================================
+
+1. BASELINE (max_score only):
+   AUC-ROC: 0.7785
+
+2. DISTRIBUTION FEATURES (mean, std, skew, kurtosis, entropy, etc.):
+   Cross-val AUC-ROC: 0.8132 ± 0.1154
+   Improvement over baseline: 0.0347
+
+3. TEMPORAL PATTERN FEATURES (first/second half, score distribution):
+   Cross-val AUC-ROC: 0.7985 ± 0.1110
+   Improvement over baseline: 0.0200
+
+4. ALL FEATURES COMBINED:
+   Cross-val AUC-ROC: 0.8164 ± 0.1163
+   Improvement over baseline: 0.0379
+
+================================================================================
+FEATURE IMPORTANCE (Random Forest)
+================================================================================
+          feature  importance
+        std_score    0.110970
+          entropy    0.083629
+      score_range    0.082470
+        max_score    0.081481
+  first_half_mean    0.076094
+             skew    0.071404
+        iqr_score    0.070695
+         kurtosis    0.066898
+   coef_variation    0.064527
+       mean_score    0.055925
+     median_score    0.048000
+ second_half_mean    0.047587
+    temporal_diff    0.043031
+   pct_low_scores    0.040952
+pct_medium_scores    0.040901
+      n_proposals    0.015435
+  pct_high_scores    0.000000
+
+================================================================================
+CONCLUSIONS
+================================================================================
+
+1. Baseline (max_score only):       AUC = 0.7785
+2. With distribution features:      AUC = 0.8132 (+3.5% change)
+3. With temporal pattern features:  AUC = 0.7985 (+2.0% change)
+4. With all features combined:      AUC = 0.8164 (+3.8% change)
+
+Temporal distribution DOES provide significant improvement over simple max score.
