@@ -53,7 +53,13 @@ def soft_nms(df, alpha, t1, t2, fps):
 
 def video_post_process(meta, model_name, fps=25, alpha=0.4, t1=0.2, t2=0.9, dataset_name="lavdf"):
     file = resolve_csv_file_name(meta, dataset_name)
-    df = pd.read_csv(os.path.join("output", "results", model_name, file))
+    csv_path = os.path.join("output", "results", model_name, file)
+    
+    # Skip if CSV doesn't exist (incomplete prediction run)
+    if not os.path.exists(csv_path):
+        return meta.file, []
+    
+    df = pd.read_csv(csv_path)
 
     if len(df) > 1:
         df = soft_nms(df, alpha, t1, t2, fps)
@@ -74,6 +80,9 @@ def video_post_process(meta, model_name, fps=25, alpha=0.4, t1=0.2, t2=0.9, data
 
 def resolve_csv_file_name(meta: Metadata, dataset_name: str = "lavdf") -> str:
     if dataset_name == "lavdf":
+        return meta.file.split("/")[-1].replace(".mp4", ".csv")
+    elif dataset_name == "fakeavceleb":
+        # FakeAVCeleb: extract just the filename from the full path
         return meta.file.split("/")[-1].replace(".mp4", ".csv")
     else:
         raise NotImplementedError

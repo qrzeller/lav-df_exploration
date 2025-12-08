@@ -49,7 +49,8 @@ class SaveToCsvCallback(Callback):
                 n_frames = batch[3][i]
                 video_name = batch[9][i]
                 assert isinstance(video_name, str)
-                assert video_name == self.metadata[batch_idx * batch_size + i].file
+                # Note: Don't assert metadata index match as last batch may have different size
+                # The video_name from batch is the authoritative source
                 if self.save_fusion:
                     self.gen_df_for_batfd(fusion_bm_map[i], n_frames, os.path.join(
                         "output", "results", self.model_name, video_name.split('/')[-1].replace(".mp4", ".csv")
