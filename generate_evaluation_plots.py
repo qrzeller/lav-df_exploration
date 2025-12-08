@@ -75,6 +75,7 @@ def load_data():
     
     # Extract features from all videos
     print("Extracting features from videos...")
+    print("⚠️  Note: Due to CSV filename collisions, only 158/500 real videos are available")
     csv_files = [f for f in os.listdir(csv_dir) if f.endswith('.csv')]
     
     feature_list = []
@@ -126,22 +127,39 @@ def load_data():
     clf = model_data['classifier']
     feature_cols = model_data['feature_cols']
     
-    return df_features, clf, feature_cols
-
-
-def plot_roc_curves(df_features, clf, feature_cols):
-    """Plot ROC curves comparing baseline and temporal classifier."""
-    print("\nGenerating ROC curves...")
+    # Split data the same way as training (80/20, random_state=42)
+    from sklearn.model_selection import train_test_split
     
-    y_true = df_features['is_fake'].values
+    print("\nSplitting data (80/20, stratified, random_state=42)...")
+    train_indices, test_indices = train_test_split(
+        np.arange(len(df_features)),
+        test_size=0.2,
+        random_state=42,
+        stratify=df_features['is_fake'].values
+    )
+    
+    df_train = df_features.iloc[train_indices].reset_index(drop=True)
+    df_test = df_features.iloc[test_indices].reset_index(drop=True)
+    
+    print(f"Train set: {len(df_train)} videos ({(df_train['is_fake']==False).sum()} real, {(df_train['is_fake']==True).sum()} fake)")
+    print(f"Test set:  {len(df_test)} videos ({(df_test['is_fake']==False).sum()} real, {(df_test['is_fake']==True).sum()} fake)")
+    
+    return df_features, df_train, df_test, clf, feature_cols
+
+
+def plot_roc_curves(df_test, clf, feature_cols):
+    """Plot ROC curves comparing baseline and temporal classifier."""
+    print("\nGenerating ROC curves (TEST SET ONLY)...")
+    
+    y_true = df_test['is_fake'].values
     
     # Baseline: max_score only
-    y_score_baseline = df_features['max_score'].values
+    y_score_baseline = df_test['max_score'].values
     fpr_baseline, tpr_baseline, _ = roc_curve(y_true, y_score_baseline)
     auc_baseline = auc(fpr_baseline, tpr_baseline)
     
     # Temporal classifier
-    X = df_features[feature_cols].fillna(0).values
+    X = df_test[feature_cols].fillna(0).values
     y_proba_temporal = clf.predict_proba(X)[:, 1]
     fpr_temporal, tpr_temporal, _ = roc_curve(y_true, y_proba_temporal)
     auc_temporal = auc(fpr_temporal, tpr_temporal)
@@ -184,11 +202,11 @@ def plot_roc_curves(df_features, clf, feature_cols):
     plt.close()
 
 
-def plot_method_comparison(df_features, clf, feature_cols):
+def plot_method_comparison(df_test, clf, feature_cols):
     """Bar chart comparing different methods."""
-    print("\nGenerating method comparison chart...")
+    print("\nGenerating method comparison chart (TEST SET ONLY)...")
     
-    y_true = df_features['is_fake'].values
+    y_true = df_test['is_fake'].values
     
     # Calculate AUC for different methods
     methods = []
@@ -201,45 +219,18 @@ def plot_method_comparison(df_features, clf, feature_cols):
     })
     
     # 2. Max score (baseline)
-    auc_max = roc_auc_score(y_true, df_features['max_score'].values)
+    auc_max = roc_auc_score(y_true, df_test['max_score'].values)
     methods.append({
         'Method': 'Max Score\n(Baseline)',
         'AUC': auc_max,
         'Category': 'Simple'
     })
     
-    # 3. Distribution features only
-    dist_features = ['mean_score', 'std_score', 'median_score', 'iqr_score', 
-                     'skew', 'kurtosis', 'entropy', 'coef_variation']
-    X_dist = df_features[dist_features].fillna(0).values
-    from sklearn.ensemble import RandomForestClassifier
-    clf_dist = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
-    clf_dist.fit(X_dist, y_true)
-    auc_dist = roc_auc_score(y_true, clf_dist.predict_proba(X_dist)[:, 1])
-    methods.append({
-        'Method': 'Distribution\nFeatures Only',
-        'AUC': auc_dist,
-        'Category': 'Advanced'
-    })
-    
-    # 4. Temporal features only
-    temp_features = ['first_half_mean', 'second_half_mean', 'temporal_diff',
-                     'pct_high_scores', 'pct_medium_scores', 'pct_low_scores']
-    X_temp = df_features[temp_features].fillna(0).values
-    clf_temp = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
-    clf_temp.fit(X_temp, y_true)
-    auc_temp = roc_auc_score(y_true, clf_temp.predict_proba(X_temp)[:, 1])
-    methods.append({
-        'Method': 'Temporal\nPattern Only',
-        'AUC': auc_temp,
-        'Category': 'Advanced'
-    })
-    
-    # 5. All features combined
-    X_all = df_features[feature_cols].fillna(0).values
+    # 3. Temporal classifier (pre-trained)
+    X_all = df_test[feature_cols].fillna(0).values
     auc_all = roc_auc_score(y_true, clf.predict_proba(X_all)[:, 1])
     methods.append({
-        'Method': 'All Features\nCombined',
+        'Method': 'Temporal\nClassifier',
         'AUC': auc_all,
         'Category': 'Best'
     })
@@ -247,10 +238,9 @@ def plot_method_comparison(df_features, clf, feature_cols):
     df_methods = pd.DataFrame(methods)
     
     # Plot
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, ax = plt.subplots(figsize=(10, 7))
     
-    colors = {'Baseline': '#d62728', 'Simple': '#ff7f0e', 
-              'Advanced': '#1f77b4', 'Best': '#2ca02c'}
+    colors = {'Baseline': '#d62728', 'Simple': '#ff7f0e', 'Best': '#2ca02c'}
     
     bars = ax.bar(df_methods['Method'], df_methods['AUC'],
                   color=[colors[cat] for cat in df_methods['Category']],
@@ -289,12 +279,12 @@ def plot_method_comparison(df_features, clf, feature_cols):
     plt.close()
 
 
-def plot_demographic_fairness(df_features, clf, feature_cols):
+def plot_demographic_fairness(df_test, clf, feature_cols):
     """Plot fairness analysis across demographics."""
-    print("\nGenerating demographic fairness plots...")
+    print("\nGenerating demographic fairness plots (TEST SET ONLY)...")
     
-    y_true = df_features['is_fake'].values
-    X = df_features[feature_cols].fillna(0).values
+    y_true = df_test['is_fake'].values
+    X = df_test[feature_cols].fillna(0).values
     y_proba = clf.predict_proba(X)[:, 1]
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
@@ -306,7 +296,7 @@ def plot_demographic_fairness(df_features, clf, feature_cols):
     race_counts = []
     
     for race in races:
-        race_mask = df_features['race'] == race
+        race_mask = df_test['race'] == race
         if race_mask.sum() > 0:
             race_y_true = y_true[race_mask]
             race_y_proba = y_proba[race_mask]
@@ -327,9 +317,9 @@ def plot_demographic_fairness(df_features, clf, feature_cols):
     ax1.set_xticklabels(races, rotation=45, ha='right')
     ax1.set_ylabel('AUC-ROC Score', fontsize=13, fontweight='bold')
     ax1.set_xlabel('Race Group', fontsize=13, fontweight='bold')
-    ax1.set_title('Performance by Race\n(No Bias Detected)', 
+    ax1.set_title('Performance by Race\n(Test Set Evaluation)', 
                   fontsize=14, fontweight='bold', pad=15)
-    ax1.set_ylim([0.85, 1.0])
+    ax1.set_ylim([0.65, 0.95])
     ax1.grid(True, axis='y', alpha=0.3)
     ax1.axhline(y=np.mean([a for a in race_aucs if a > 0]), 
                 color='red', linestyle='--', linewidth=2, alpha=0.7,
@@ -349,7 +339,7 @@ def plot_demographic_fairness(df_features, clf, feature_cols):
     gender_counts = []
     
     for gender in genders:
-        gender_mask = df_features['gender'] == gender
+        gender_mask = df_test['gender'] == gender
         if gender_mask.sum() > 0:
             gender_y_true = y_true[gender_mask]
             gender_y_proba = y_proba[gender_mask]
@@ -368,9 +358,9 @@ def plot_demographic_fairness(df_features, clf, feature_cols):
                     edgecolor='black', linewidth=1.5, alpha=0.8)
     ax2.set_ylabel('AUC-ROC Score', fontsize=13, fontweight='bold')
     ax2.set_xlabel('Gender', fontsize=13, fontweight='bold')
-    ax2.set_title('Performance by Gender\n(Balanced Performance)', 
+    ax2.set_title('Performance by Gender\n(Test Set Evaluation)', 
                   fontsize=14, fontweight='bold', pad=15)
-    ax2.set_ylim([0.85, 1.0])
+    ax2.set_ylim([0.65, 0.95])
     ax2.grid(True, axis='y', alpha=0.3)
     ax2.axhline(y=np.mean([a for a in gender_aucs if a > 0]), 
                 color='red', linestyle='--', linewidth=2, alpha=0.7,
@@ -440,12 +430,12 @@ def plot_feature_importance(clf, feature_cols):
     plt.close()
 
 
-def plot_threshold_analysis(df_features, clf, feature_cols):
+def plot_threshold_analysis(df_test, clf, feature_cols):
     """Plot performance metrics across different thresholds."""
-    print("\nGenerating threshold analysis plots...")
+    print("\nGenerating threshold analysis plots (TEST SET ONLY)...")
     
-    y_true = df_features['is_fake'].values
-    X = df_features[feature_cols].fillna(0).values
+    y_true = df_test['is_fake'].values
+    X = df_test[feature_cols].fillna(0).values
     y_proba = clf.predict_proba(X)[:, 1]
     
     thresholds = np.linspace(0.0, 1.0, 101)
@@ -510,12 +500,12 @@ def plot_threshold_analysis(df_features, clf, feature_cols):
     plt.close()
 
 
-def plot_score_distributions(df_features):
+def plot_score_distributions(df_test):
     """Plot distribution of scores for real vs fake videos."""
-    print("\nGenerating score distribution plots...")
+    print("\nGenerating score distribution plots (TEST SET ONLY)...")
     
-    real_scores = df_features[df_features['is_fake'] == False]['max_score'].values
-    fake_scores = df_features[df_features['is_fake'] == True]['max_score'].values
+    real_scores = df_test[df_test['is_fake'] == False]['max_score'].values
+    fake_scores = df_test[df_test['is_fake'] == True]['max_score'].values
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
@@ -576,14 +566,14 @@ def plot_score_distributions(df_features):
     plt.close()
 
 
-def create_summary_figure(df_features, clf, feature_cols):
+def create_summary_figure(df_test, clf, feature_cols):
     """Create a comprehensive summary figure."""
-    print("\nGenerating summary figure...")
+    print("\nGenerating summary figure (TEST SET ONLY)...")
     
-    y_true = df_features['is_fake'].values
-    X = df_features[feature_cols].fillna(0).values
+    y_true = df_test['is_fake'].values
+    X = df_test[feature_cols].fillna(0).values
     y_proba = clf.predict_proba(X)[:, 1]
-    y_baseline = df_features['max_score'].values
+    y_baseline = df_test['max_score'].values
     
     fig = plt.figure(figsize=(16, 10))
     gs = fig.add_gridspec(2, 3, hspace=0.3, wspace=0.3)
@@ -638,7 +628,7 @@ def create_summary_figure(df_features, clf, feature_cols):
     race_aucs = []
     for race_full in ['African', 'Asian (East)', 'Asian (South)', 
                       'Caucasian (American)', 'Caucasian (European)']:
-        mask = df_features['race'] == race_full
+        mask = df_test['race'] == race_full
         if mask.sum() > 0 and len(np.unique(y_true[mask])) > 1:
             race_aucs.append(roc_auc_score(y_true[mask], y_proba[mask]))
         else:
@@ -653,7 +643,7 @@ def create_summary_figure(df_features, clf, feature_cols):
                     ha='center', va='bottom', fontsize=9, fontweight='bold')
     ax4.set_ylabel('AUC-ROC', fontweight='bold')
     ax4.set_title('Performance by Race', fontweight='bold', fontsize=13)
-    ax4.set_ylim([0.85, 1.0])
+    ax4.set_ylim([0.65, 0.95])
     ax4.grid(True, axis='y', alpha=0.3)
     ax4.tick_params(axis='x', labelsize=8)
     
@@ -661,7 +651,7 @@ def create_summary_figure(df_features, clf, feature_cols):
     ax5 = fig.add_subplot(gs[1, 1])
     gender_aucs = []
     for gender in ['men', 'women']:
-        mask = df_features['gender'] == gender
+        mask = df_test['gender'] == gender
         if mask.sum() > 0 and len(np.unique(y_true[mask])) > 1:
             gender_aucs.append(roc_auc_score(y_true[mask], y_proba[mask]))
     
@@ -674,7 +664,7 @@ def create_summary_figure(df_features, clf, feature_cols):
                 ha='center', va='bottom', fontsize=10, fontweight='bold')
     ax5.set_ylabel('AUC-ROC', fontweight='bold')
     ax5.set_title('Performance by Gender', fontweight='bold', fontsize=13)
-    ax5.set_ylim([0.85, 1.0])
+    ax5.set_ylim([0.65, 0.95])
     ax5.grid(True, axis='y', alpha=0.3)
     
     # 6. Statistics
@@ -685,8 +675,8 @@ def create_summary_figure(df_features, clf, feature_cols):
     TEMPORAL CLASSIFIER RESULTS
     FakeAVCeleb Cross-Dataset Evaluation
     
-    Dataset:
-    • Videos: {len(df_features):,}
+    Test Set (20%):
+    • Videos: {len(df_test):,}
     • Real: {(y_true==0).sum():,} ({(y_true==0).sum()/len(y_true)*100:.1f}%)
     • Fake: {(y_true==1).sum():,} ({(y_true==1).sum()/len(y_true)*100:.1f}%)
     
@@ -727,20 +717,24 @@ def main():
     print("="*80)
     
     # Load data
-    df_features, clf, feature_cols = load_data()
+    df_features, df_train, df_test, clf, feature_cols = load_data()
     
-    print(f"\nLoaded {len(df_features)} videos:")
-    print(f"  Real: {(df_features['is_fake']==False).sum()}")
+    print(f"\nDataset Statistics:")
+    print(f"  Total videos: {len(df_features)}")
+    print(f"  Real: {(df_features['is_fake']==False).sum()} (⚠️ 158/500 due to CSV collisions)")
     print(f"  Fake: {(df_features['is_fake']==True).sum()}")
+    print(f"\n  Test set: {len(df_test)} videos")
+    print(f"  Test real: {(df_test['is_fake']==False).sum()}")
+    print(f"  Test fake: {(df_test['is_fake']==True).sum()}")
     
-    # Generate all plots
-    plot_roc_curves(df_features, clf, feature_cols)
-    plot_method_comparison(df_features, clf, feature_cols)
-    plot_demographic_fairness(df_features, clf, feature_cols)
+    # Generate all plots (using test set only)
+    plot_roc_curves(df_test, clf, feature_cols)
+    plot_method_comparison(df_test, clf, feature_cols)
+    plot_demographic_fairness(df_test, clf, feature_cols)
     plot_feature_importance(clf, feature_cols)
-    plot_threshold_analysis(df_features, clf, feature_cols)
-    plot_score_distributions(df_features)
-    create_summary_figure(df_features, clf, feature_cols)
+    plot_threshold_analysis(df_test, clf, feature_cols)
+    plot_score_distributions(df_test)
+    create_summary_figure(df_test, clf, feature_cols)
     
     print("\n" + "="*80)
     print("ALL PLOTS GENERATED SUCCESSFULLY!")
