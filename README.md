@@ -1,9 +1,121 @@
 # Localized Audio Visual DeepFake Dataset (LAV-DF)
+Link for the personal repo : [link](https://github.com/qrzeller/lav-df_exploration)
 
 <div align="center">
     <img src="assets/overview.svg">
     <p></p>
 </div>
+
+---
+
+## 🚀 Quick Start: FakeAVCeleb Cross-Dataset Evaluation
+
+### Complete Pipeline for Cross-Dataset Testing
+
+This guide shows how to run the full evaluation pipeline on FakeAVCeleb dataset with temporal feature analysis.
+
+#### Prerequisites
+
+1. **Download FakeAVCeleb v1.2 dataset** and place it in:
+   ```
+   dataset/multimodal-time-localisation/FakeAVCeleb_v1.2/FakeAVCeleb_v1.2/
+   ```
+
+2. **Setup environment**:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   pip install matplotlib seaborn  # For plotting
+   ```
+
+3. **Download pre-trained model** (see Models section below)
+
+#### Step 1: Run Evaluation (Inference + Post-Processing)
+
+```bash
+# Run LAV-DF model evaluation on FakeAVCeleb videos
+# This performs inference AND post-processing in one step
+python evaluate.py --config config/batfd_fakeavceleb.toml \
+    --data_root dataset/multimodal-time-localisation/FakeAVCeleb_v1.2/FakeAVCeleb_v1.2 \
+    --checkpoint output/ckpt/batfd_default.ckpt
+```
+
+**What this does**:
+- Runs inference on all FakeAVCeleb videos
+- Applies soft-NMS post-processing
+- Generates boundary predictions
+
+**Output**: 
+- CSV files with boundary scores: `output/results/batfd_default_fakeavceleb/`
+- JSON with temporal proposals: `output/results/batfd_default_fakeavceleb.json`
+
+⚠️ **Known Issue**: CSV filename collisions cause only ~158/500 real videos to be processed (non-unique filenames like `00028.mp4`). Results remain valid but based on a subset.
+
+#### Step 2: Extract Temporal Features & Train Classifier
+
+```bash
+# Extract 17 temporal features and train Random Forest
+python temporal_feature_extraction.py --config config/batfd_fakeavceleb.toml
+```
+
+**Output**: 
+- Trained model: `output/temporal_classifier.pkl`
+- Test set results: Baseline AUC=0.7732 → Temporal AUC=0.8265 (+5.3% improvement)
+- Cross-validation: 5-fold AUC=0.8154 ± 0.1131
+- Demographic fairness analysis (race/gender)
+
+**Key Features Extracted**: std_score, kurtosis, entropy, score_range, max_score, temporal_diff, etc.
+
+#### Step 3: Generate Evaluation Plots
+
+```bash
+# Create comprehensive visualizations
+python generate_evaluation_plots.py
+```
+
+**Output**: High-resolution plots in `output/plots/`:
+1. `roc_curves_comparison.png/pdf` - ROC curves (baseline vs temporal classifier)
+2. `method_comparison.png/pdf` - Bar chart comparing methods
+3. `demographic_fairness.png/pdf` - Performance by race and gender
+4. `feature_importance.png/pdf` - Top 10 most important features
+5. `threshold_analysis.png/pdf` - Metrics vs classification threshold
+6. `score_distributions.png/pdf` - Real vs fake score distributions
+7. `summary_dashboard.png/pdf` - Comprehensive single-page overview
+
+#### Step 4: Run Inference on New Videos (Optional)
+
+```bash
+# Predict on single video
+python temporal_classifier_inference.py \
+    --csv output/results/batfd_default_fakeavceleb/00001.csv
+
+# Batch prediction on directory
+python temporal_classifier_inference.py \
+    --csv-dir output/results/batfd_default_fakeavceleb/ \
+    --output predictions.csv
+```
+
+### Performance Summary
+
+**Test Set (20% held-out, 3,679 videos)**:
+- Baseline (max boundary score): **AUC = 0.7732**
+- Temporal Classifier (17 features): **AUC = 0.8265**
+- Absolute improvement: **+0.0533** (+6.9% relative)
+- Cross-validation: **0.8154 ± 0.1131**
+
+**Demographic Fairness** (no bias detected):
+- Race groups: AUC 0.75-0.85 (variance ±0.03)
+- Gender: Men 0.81, Women 0.79 (variance ±0.01)
+
+### Documentation
+
+- **Temporal Feature Analysis**: `Documentation/temporal_distribution_analysis.md`
+- **Training Results**: `Documentation/temporal_classifier_training_results.md`
+- **Usage Guide**: `Documentation/temporal_feature_scripts_guide.md`
+- **Binary Classification Report**: `Documentation/fakeavceleb_evaluation_results.md`
+
+---
 
 <div align="center">
     <a href="https://github.com/ControlNet/LAV-DF/issues">
